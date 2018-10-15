@@ -3,7 +3,7 @@
 
 # using Python API wrapper for Poloniex: https://github.com/s4w3d0ff/python-poloniex/archive/v0.4.7.zip
 
-from src.utils import utils
+from src.utils import poloniexutils
 from poloniex import Poloniex, Coach
 
 
@@ -77,7 +77,7 @@ with open(filename, 'w') as csvfile:
             print('\nTrade triangle no.' + repr(i))
             # get prices according to trade definition (sell or buy)
             for j, operation in enumerate(tradeLoop):
-                bookInfos[j] = utils.getBookInfo(polo.returnOrderBook(operation[0]))
+                bookInfos[j] = poloniexutils.getBookInfo(polo.returnOrderBook(operation[0]))
                 print('Market no.%s: %s' % (repr(j), operation[0]))
 
             # Calculate forward loop margin...................................
