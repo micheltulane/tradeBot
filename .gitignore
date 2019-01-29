@@ -1,3 +1,5 @@
 .git
 .idea
 logs
+src/core/config.py
+src/utils/__pycache__/
