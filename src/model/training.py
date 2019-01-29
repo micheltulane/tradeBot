@@ -6,7 +6,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
-import utils.datautils as dut
+import tradeBot.src.utils.datautils as dut
 
 # NN Model related imports
 from sklearn import preprocessing as pp
@@ -169,7 +169,7 @@ validation_data = (np.expand_dims(x_test_scaled, axis=0),
 
 # Create RNN model
 model = Sequential()
-model.add(LSTM(units=512,
+model.add(LSTM(units=128,
                return_sequences=True,
                input_shape=(None, num_x_signals,)))
 

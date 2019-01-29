@@ -18,7 +18,7 @@ with open(filename, 'w') as csvfile:
 
     # init Poloniex wrapper
     myCoach = Coach(timeFrame=1.0, callLimit=6) # create a coach, limit = 6 API calls/s
-    polo = Poloniex(key='1L72WO53-T96VC9QW-EUWB0KQN-SNU0LRUC',secret='51ce4fb70439a7c2b1457bcedcd4528ec4598d7d317577288b7eb65f50df7b6b571db6d3bdc14a48eea885bf7aad5be50b1bf843345aebf99a0dede04c8de746', coach=myCoach)
+    polo = Poloniex(key='xxx',secret='xxx', coach=myCoach)
 
     # Get current fees and volume
     print("Getting current fees...")
