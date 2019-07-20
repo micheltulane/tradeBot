@@ -1,6 +1,7 @@
 .git
 .idea
 logs
+data
 src/core/config.py
 src/utils/__pycache__/
 src/model/rnn_exercise.py
