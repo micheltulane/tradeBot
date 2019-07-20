@@ -6,13 +6,13 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
-import tradeBot.src.utils.datautils as dut
+import tradeBot.src.utils.datautils as datautils
 
 # NN Model related imports
 from sklearn import preprocessing as pp
 import tensorflow as tf
 from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.layers import Input, Dense, LSTM, GRU, Embedding, Activation
+from tensorflow.python.keras.layers import   Input, Dense, LSTM, GRU, Embedding, Activation
 from tensorflow.python.keras.optimizers import RMSprop
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
 
@@ -21,7 +21,7 @@ TRAIN_MODEL = False
 
 # Load ETH/BTC Poloniex exchange data (hourly)
 filename = os.path.abspath('../../data/Poloniex_ETHBTC_1h.csv')
-exch_data = dut.read_cryptodatadownload_csv(filename=filename)
+exch_data = datautils.read_cryptodatadownload_csv(filename=filename)
 
 # Take date string and generate lists of days of the week and hour
 days = []
@@ -39,34 +39,40 @@ exch_data['Day'] = days
 del hours
 del days
 
-# Generate target data (hourly close price, shifted back 1hr)
+# Generate target data (hourly open price, shifted back 1hr)
 target_names = ['Close']
-shift_steps = 1
-exch_data['Prediction'] = exch_data[target_names[0]].shift(+shift_steps)
+shift_steps = 0 # 1
+exch_data['Prediction'] = exch_data[target_names[0]].shift(-shift_steps)
+
+# Drop last row (where prediction value is unknown)
+exch_data = exch_data.iloc[:-1]
 
 # Plot Closing prices(part of input data) and predicted future closing prices (output data)
-# ax = exch_data.plot( y='Close', color='red', linewidth=1)
+# ax = exch_data.plot(y='Close', color='red', linewidth=1)
 # exch_data.plot(y='Prediction', color='blue', linewidth=1, ax=ax)
 # plt.show()
 
 # Create input and output numpy arrays
 # Input signals (in order) : Day, Hour, Open, High, Low , Close, Volume From, Volume To
 
-x_data = np.rot90(np.array([np.array(exch_data['Day'].values[shift_steps:-1], dtype=np.float64),
-                  np.array(exch_data['Hour'].values[shift_steps:-1], dtype=np.float64),
-                  np.array(exch_data['Open'].values[shift_steps:-1], dtype=np.float64),
-                  np.array(exch_data['High'].values[shift_steps:-1], dtype=np.float64),
-                  np.array(exch_data['Low'].values[shift_steps:-1], dtype=np.float64),
-                  np.array(exch_data['Close'].values[shift_steps:-1], dtype=np.float64),
-                  np.array(exch_data['Volume From'].values[shift_steps:-1], dtype=np.float64),
-                  np.array(exch_data['Volume To'].values[shift_steps:-1], dtype=np.float64)]))
+x_data = np.rot90(np.array([np.array(exch_data['Day'].values, dtype=np.float64),
+                            np.array(exch_data['Hour'].values, dtype=np.float64),
+                            np.array(exch_data['Open'].values, dtype=np.float64),
+                            np.array(exch_data['High'].values, dtype=np.float64),
+                            np.array(exch_data['Low'].values, dtype=np.float64),
+                            np.array(exch_data['Close'].values, dtype=np.float64),
+                            np.array(exch_data['Volume From'].values, dtype=np.float64),
+                            np.array(exch_data['Volume To'].values, dtype=np.float64)]))
 
-y_data = np.array(exch_data['Prediction'].values[shift_steps:-1], dtype=np.float64)
+# x_data = np.rot90(np.array([np.array(exch_data['Open'].values, dtype=np.float64),
+#                             np.array(exch_data['High'].values, dtype=np.float64),
+#                             np.array(exch_data['Low'].values, dtype=np.float64),
+#                             np.array(exch_data['Close'].values, dtype=np.float64),
+#                             np.array(exch_data['Volume From'].values, dtype=np.float64),
+#                             np.array(exch_data['Volume To'].values, dtype=np.float64)]))
+
+y_data = np.array(exch_data['Prediction'].values, dtype=np.float64)
 y_data = y_data.reshape((len(y_data), 1))
-
-# Flip x and y data to get back in chronological order
-x_data = np.flip(x_data, axis=0)
-y_data = np.flip(y_data, axis=0)
 
 print("Shape:", x_data.shape)
 print("Type:", x_data.dtype)
@@ -75,7 +81,7 @@ print("Shape:", y_data.shape)
 print("Type:", y_data.dtype)
 
 # Split training and testing data
-train_split = 0.9
+train_split = 0.8
 num_data = len(x_data)
 num_train = int(train_split * num_data)
 num_test = num_data - num_train
@@ -87,42 +93,23 @@ y_test = y_data[num_train:]
 num_x_signals = x_data.shape[1]
 num_y_signals = y_data.shape[1]
 
-# Standardize data......................................................................................................
-# Create input and output scalers
-x_st_scaler = pp.StandardScaler()
-y_st_scaler = pp.StandardScaler()
-
-# Train standard scalers on whole data
-x_st_scaler.fit(x_data)
-y_st_scaler.fit(y_data)
-
-# Apply trained standard scalers on all data
-x_data_stand = x_st_scaler.transform(x_data)
-x_train_stand = x_st_scaler.transform(x_train)
-x_test_stand = x_st_scaler.transform(x_test)
-
-y_data_stand = y_st_scaler.transform(y_data)
-y_train_stand = y_st_scaler.transform(y_train)
-y_test_stand = y_st_scaler.transform(y_test)
-
-
 # Normalize data........................................................................................................
 # Create input and output scalers
 x_mm_scaler = pp.MinMaxScaler()
 y_mm_scaler = pp.MinMaxScaler()
 
 # Train scalers on standardized data
-x_mm_scaler.fit(x_data_stand)
-y_mm_scaler.fit(y_data_stand)
+x_mm_scaler.fit(x_data)
+y_mm_scaler.fit(y_data)
 
 # Normalize training and test data
-x_data_scaled = x_mm_scaler.transform(x_data_stand)
-x_train_scaled = x_mm_scaler.transform(x_train_stand)
-x_test_scaled = x_mm_scaler.transform(x_test_stand)
+x_data_scaled = x_mm_scaler.transform(x_data)
+x_train_scaled = x_mm_scaler.transform(x_train)
+x_test_scaled = x_mm_scaler.transform(x_test)
 
-y_data_scaled = y_mm_scaler.transform(y_data_stand)
-y_train_scaled = y_mm_scaler.transform(y_train_stand)
-y_test_scaled = y_mm_scaler.transform(y_test_stand)
+y_data_scaled = y_mm_scaler.transform(y_data)
+y_train_scaled = y_mm_scaler.transform(y_train)
+y_test_scaled = y_mm_scaler.transform(y_test)
 
 
 # Generate random training batches of training data
@@ -155,9 +142,9 @@ def batch_generator(batch_size, sequence_length):
 
 # Batch size: number of sequences to use in one iteration (mini-batch mode)
 # Tune this parameter depending on system load during training
-batch_size = 128
-# Equivalent to 4 weeks with 1hr timesteps
-sequence_length = 24*7*4
+batch_size = 64
+# Equivalent to 1 week with 1hr timestep
+sequence_length = 24*7
 generator = batch_generator(batch_size=batch_size,
                             sequence_length=sequence_length)
 x_batch, y_batch = next(generator)
@@ -169,13 +156,13 @@ validation_data = (np.expand_dims(x_test_scaled, axis=0),
 
 # Create RNN model
 model = Sequential()
-model.add(LSTM(units=128,
-               return_sequences=True,
-               input_shape=(None, num_x_signals,)))
+model.add(GRU(units=128,
+              return_sequences=True,
+              input_shape=(None, num_x_signals,)))
 
-model.add(Dense(num_y_signals, activation='relu'))
+model.add(Dense(num_y_signals, activation='sigmoid'))
 
-warmup_steps = 50
+warmup_steps = 25
 
 
 def loss_mse_warmup(y_true, y_pred):
@@ -229,7 +216,7 @@ callback_early_stopping = EarlyStopping(monitor='val_loss',
                                         patience=5, verbose=1)
 
 callback_tensorboard = TensorBoard(log_dir=os.path.abspath('../../logs/training/'),
-                                   histogram_freq=0,
+                                   histogram_freq=1,
                                    write_graph=False)
 
 callback_reduce_lr = ReduceLROnPlateau(monitor='val_loss',
@@ -247,11 +234,11 @@ if TRAIN_MODEL:
     # Train the neural net
     model.fit_generator(generator=generator,
                         epochs=20,
-                        steps_per_epoch=100,
+                        steps_per_epoch=num_data/batch_size,
                         validation_data=validation_data,
                         callbacks=callbacks)
 else:
-    # Load savec weights
+    # Load saved weights
     try:
         model.load_weights(path_checkpoint)
     except Exception as error:
@@ -300,7 +287,7 @@ def plot_comparison(start_idx, length=100, train=True):
     # The output of the model is between 0 and 1.
     # Do an inverse map to get it back to the scale
     # of the original data-set.
-    y_pred_rescaled = y_st_scaler.inverse_transform(y_mm_scaler.inverse_transform(y_pred[0]))
+    y_pred_rescaled = y_mm_scaler.inverse_transform(y_pred[0])
 
     print(y_pred_rescaled.shape)
     print(y_true.shape)
@@ -328,7 +315,6 @@ def plot_comparison(start_idx, length=100, train=True):
         plt.show()
 
 
-plot_comparison(start_idx=5000, length=10000, train=True)
+plot_comparison(start_idx=600, length=10000, train=True)
 
-pass
 
