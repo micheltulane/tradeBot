@@ -19,7 +19,7 @@ import json
 
 START_EPOCH = 1494547200  # 2017 Mai 12th, 00:00:00 (GMT)
 ONE_MONTH = 2592000  # 1 month unix time length
-DATA_LENGTH_MONTHS = 27
+DATA_LENGTH_MONTHS = 28
 DATA_PERIOD = 300  # 5 min
 DATA_PATH = "../../data/5min_fetched/"
 
@@ -51,11 +51,20 @@ for pair in PAIRS:
         start = start + ONE_MONTH
 
     # generate datetime, day and time values from unix timestamp
-    print("Generating metadata...")
+    print("Generating metadata and features...")
     for i in data:
         dtobj = datetime.fromtimestamp(i["date"])
         i.update({"day": dtobj.strftime("%d %B, %Y")})
         i.update({"time": dtobj.strftime("%H:%M:%S")})
+        i.update({"hour": dtobj.strftime("%H")})
+        i.update({"weekday": dtobj.strftime("%w")})
+        i.update({(pair + "_price_change_last_5min"): (i["close"] - i["open"])})
+        i.update({(pair + "_volatility"): (i["high"] - i["low"])})
+        i[(pair + "_volume")] = i.pop("volume")
+
+    print("Generating prediction values")
+    for index, i in enumerate(data[:-3]):
+        i.update({(pair + "_expected_price_change_15min"): (data[index + 3]["close"] - i["close"])})
 
     #  save data to excel
     print("Saving to excel...")
