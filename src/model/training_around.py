@@ -20,7 +20,7 @@ from tensorflow.python.keras.optimizers import RMSprop
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
 
 # Execution variables
-TRAIN_MODEL = True
+TRAIN_MODEL = False
 
 DATA_PATH = "../../data/5min_fetched/"
 TRAINING_LOG_PATH = "../../logs/training/"
@@ -123,7 +123,7 @@ def batch_generator(batch_size, sequence_length):
 
 
 batch_size = 1024
-sequence_length = 64
+sequence_length = 256
 generator = batch_generator(batch_size=batch_size,
                             sequence_length=sequence_length)
 
@@ -131,12 +131,12 @@ validation_data = (np.expand_dims(x_test_scaled, axis=0),
                    np.expand_dims(y_test_scaled, axis=0))
 
 model = Sequential()
-model.add(CuDNNLSTM(units=32,
+model.add(CuDNNLSTM(units=128,
                     return_sequences=True,
                     input_shape=(None, num_x_signals,)))
 model.add(Dense(num_y_signals, activation='sigmoid'))
 
-warmup_steps = 8
+warmup_steps = 16
 
 
 def loss_mse_warmup(y_true, y_pred):
@@ -271,7 +271,7 @@ def plot_comparison(start_idx, length=100, train=True):
 
         # Plot and compare the two signals.
         plt.plot(signal_true, label='true')
-        plt.plot(signal_pred*10, label='pred')
+        plt.plot(signal_pred, label='pred')
 
         # Plot grey box for warmup-period.
         p = plt.axvspan(0, warmup_steps, facecolor='black', alpha=0.15)
@@ -282,32 +282,82 @@ def plot_comparison(start_idx, length=100, train=True):
         plt.show()
 
 
-plot_comparison(start_idx=0, length=20000, train=False)
+# plot_comparison(start_idx=0, length=20000, train=False)
 
 
-def simulate_model_on_history(hist_length=100, length=100, train=False):
+def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=False):
     """
     Parse historical data and use trained model to make buy/sell decisions
 
     :param hist_length: length of previous data used to predict values
+    :param start_idx: Start-index for the time-series.
     :param length: Sequence-length to process and plot.
     :param train: Boolean whether to use training- or test-set.
     """
 
-    buy_threshold = 0
-    sell_threshold = 0
+    buy_threshold = 3
+    sell_threshold = -0.6
+    account_value = 100
+    account_is_usdt = True
+    last_sold_price = 1
+    buy_cnt = 0
+    sell_cnt = 0
+    hodl_cnt = 0
 
-    # start in data at pos=hist_length (in order to have at leas the hist size before the first tested point)
-    # for each iteration before index reaches "length"
-        # select input sequence
-        # expand dims, then predict with model
-        # use last point of model output as predicted price change
-        # if buy: convert usdt value to btc value
-        # if sell: convert btc value to usdt
+    if train:
+        # Use training-data.
+        x = x_train_scaled
+    else:
+        # Use test-data.
+        x = x_test_scaled
 
-    # if value is btc, convert to usdt with last known price
-    # print final usdt value
+    start_value = account_value
+    for i in range(length):
+        hist_time = start_idx + i
+        time = hist_time + hist_length
 
+        print("Hist index: {hist}, Time: {time}".format(hist=hist_time, time=time))
+
+        # Input-signals for the model.
+        x_sim = x[hist_time:time]
+        x_sim_exp = np.expand_dims(x_sim, axis=0)
+        x_sim_rescaled = x_scaler.inverse_transform(x_sim_exp[0])
+
+        # Use the model to predict the output-signals.
+        y_pred = model.predict(x_sim_exp)
+        y_pred_rescaled = y_scaler.inverse_transform(y_pred[0])
+
+        # check last prediction value for price increase or decrease
+        last_prediction = y_pred_rescaled[-1][0]
+        current_price = x_sim_rescaled[-1][0]
+
+        print("Last prediction: {pred}".format(pred=last_prediction))
+        print("Current price: {price}".format(price=current_price))
+
+        if (last_prediction > buy_threshold) and account_is_usdt:
+            print("Buying")
+            account_value = account_value/current_price
+            account_is_usdt = False
+            last_sold_price = current_price
+            buy_cnt += 1
+
+        elif ((last_prediction < sell_threshold) and not account_is_usdt) or (i == length-1 and not account_is_usdt):
+            print("Selling")
+            account_value = account_value*current_price
+            account_is_usdt = True
+            sell_cnt += 1
+
+        else:
+            print("Hodl")
+            hodl_cnt += 1
+
+    print("Start value: {startval} , end value: {endval}".format(startval=start_value, endval=account_value))
+    print("Buy count: {buys} , Sell count: {sells}, Hodl count: {hodls}".format(buys=buy_cnt,
+                                                                                sells=sell_cnt,
+                                                                                hodls=hodl_cnt))
+
+
+simulate_model_on_history(hist_length=sequence_length, start_idx=18000, length=4320, train=False)
 
 pass
 
