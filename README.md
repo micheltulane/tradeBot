@@ -1,2 +1,2 @@
 # tradeBot
-playing with Poloniex API python wrapper
+playing with tensorflow / keras
