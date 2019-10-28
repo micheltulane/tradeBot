@@ -2,6 +2,6 @@
 .idea
 logs
 data
-src/core/config.py
+src/core/config_worker1.py
 src/utils/__pycache__/
 src/model/rnn_exercise.py
