@@ -15,7 +15,7 @@ import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow import keras
 from keras import layers
-from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.models import Sequential, model_from_json
 from tensorflow.python.keras.layers import Input, Dense, LSTM, GRU, SimpleRNN, Embedding, Activation, CuDNNLSTM
 from tensorflow.python.keras.optimizers import RMSprop
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
@@ -47,7 +47,7 @@ print(y_data.shape)
 x_data_ndarray = x_data.values
 y_data_ndarray = y_data.values
 
-train_split = 0.8
+train_split = 0.9
 num_train = int(train_split * len(x_data_ndarray))
 num_test = len(x_data_ndarray)-num_train
 
@@ -363,28 +363,15 @@ def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=Fa
                                                                                 hodls=hodl_cnt))
 
 
-simulate_model_on_history(hist_length=sequence_length, start_idx=0, length=48000, train=False)
+simulate_model_on_history(hist_length=sequence_length, start_idx=0, length=20000, train=False)
 
 
-def save_model_package_info(model_filename, lstm_units, sequence_length, currency_pair, buy_threshold, sell_threshold):
-    model_info = {
-        "model_filename": model_filename,
-        "lstm_units": lstm_units,
-        "sequence_length": sequence_length,
-        "currency_pair": currency_pair,
-        "buy_threshold": buy_threshold,
-        "sell_threshold": sell_threshold
-    }
-    with open('model_info.json', 'w') as fp:
-        json.dump(model_info, fp, sort_keys=True, indent=4)
+def save_model_package_info():
+    with open("model_save.json", "w") as json_file:
+        json_file.write(model.to_json())
 
 
-save_model_package_info(model_filename="model.keras",
-                        lstm_units=lstm_units,
-                        sequence_length=sequence_length,
-                        currency_pair="USDT_BTC",
-                        buy_threshold=BUY_THRESHOLD,
-                        sell_threshold=SELL_THRESHOLD)
+# save_model_package_info()
 
 
 pass
