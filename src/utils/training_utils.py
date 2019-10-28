@@ -10,7 +10,7 @@ def get_polo_data():
 
     start_epoch = 1496188800  # Wednesday 31 May 2017 00:00:00
     one_month = 2592000  # 1 month unix time length
-    data_length_months = 29
+    data_length_months = 30
     data_period = 300  # 5 min
     data_path = "../../data/5min_fetched/"
 
@@ -40,7 +40,7 @@ def get_polo_data():
             temp = json.loads(reponse.content)
 
             # check if response is the correct length
-            if len(temp) != 8640:
+            if (len(temp) != 8640) and (month < data_length_months-1):
                 print("wrong response size. Retrying with increased end epoch")
                 reponse = requests.get(
                     url=(
@@ -92,5 +92,7 @@ def get_polo_data():
         print("Saving to feather...")
         data_df.to_feather(data_path + pair + ".feather")
 
+
+get_polo_data()
 
 

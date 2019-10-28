@@ -4,6 +4,7 @@ __author__ = "Michel Tulane"
 # Generic imports
 import os
 import numpy as np
+import json
 import pandas as pd
 import feather
 import matplotlib.pyplot as plt
@@ -15,7 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow import keras
 from keras import layers
 from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.layers import   Input, Dense, LSTM, GRU, SimpleRNN, Embedding, Activation, CuDNNLSTM
+from tensorflow.python.keras.layers import Input, Dense, LSTM, GRU, SimpleRNN, Embedding, Activation, CuDNNLSTM
 from tensorflow.python.keras.optimizers import RMSprop
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
 
@@ -24,9 +25,10 @@ TRAIN_MODEL = False
 
 DATA_PATH = "../../data/5min_fetched/"
 TRAINING_LOG_PATH = "../../logs/training/"
-MODEL_CHECKPOINT_PATH = TRAINING_LOG_PATH + "checkpoint/model_checkpoint.keras"
+MODEL_CHECKPOINT_PATH = TRAINING_LOG_PATH + "checkpoint/model.keras"
 TENSORBOARD_PATH = TRAINING_LOG_PATH + "/tensorboard"
-
+BUY_THRESHOLD = 0.1
+SELL_THRESHOLD = -0.1
 tf.keras.backend.clear_session()  # Reset notebook state.
 
 
@@ -36,7 +38,7 @@ print("Importing data from disk...")
 df = feather.read_dataframe(os.path.abspath(DATA_PATH + "/USDT_BTC.feather"))
 
 print("Dataframe shame: {shape}".format(shape=df.shape))
-x_data = df.drop(columns=["day", "time", "hour", "USDT_BTC_expected_price_change_15min", "USDT_BTC_expected_price_change_5min"])
+x_data = df.drop(columns=["day", "time", "USDT_BTC_expected_price_change_15min", "USDT_BTC_expected_price_change_5min"])
 y_data = df[["USDT_BTC_expected_price_change_5min"]]
 target_names = ["BTC_expected_price_change_5min"]
 print(x_data.shape)
@@ -45,7 +47,7 @@ print(y_data.shape)
 x_data_ndarray = x_data.values
 y_data_ndarray = y_data.values
 
-train_split = 0.9
+train_split = 0.8
 num_train = int(train_split * len(x_data_ndarray))
 num_test = len(x_data_ndarray)-num_train
 
@@ -122,8 +124,8 @@ def batch_generator(batch_size, sequence_length):
         yield (x_batch, y_batch)
 
 
-batch_size = 1024
-sequence_length = 256
+batch_size = 64
+sequence_length = 1024
 generator = batch_generator(batch_size=batch_size,
                             sequence_length=sequence_length)
 
@@ -131,12 +133,13 @@ validation_data = (np.expand_dims(x_test_scaled, axis=0),
                    np.expand_dims(y_test_scaled, axis=0))
 
 model = Sequential()
-model.add(CuDNNLSTM(units=128,
+lstm_units = 512
+model.add(CuDNNLSTM(units=lstm_units,
                     return_sequences=True,
                     input_shape=(None, num_x_signals,)))
 model.add(Dense(num_y_signals, activation='sigmoid'))
 
-warmup_steps = 16
+warmup_steps = 64
 
 
 def loss_mse_warmup(y_true, y_pred):
@@ -285,6 +288,7 @@ def plot_comparison(start_idx, length=100, train=True):
 # plot_comparison(start_idx=0, length=20000, train=False)
 
 
+# test another simulation method (compute entire prediction at once...)
 def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=False):
     """
     Parse historical data and use trained model to make buy/sell decisions
@@ -294,12 +298,8 @@ def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=Fa
     :param length: Sequence-length to process and plot.
     :param train: Boolean whether to use training- or test-set.
     """
-
-    buy_threshold = 3
-    sell_threshold = -0.6
-    account_value = 100
+    account_value = 1000
     account_is_usdt = True
-    last_sold_price = 1
     buy_cnt = 0
     sell_cnt = 0
     hodl_cnt = 0
@@ -310,6 +310,14 @@ def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=Fa
     else:
         # Use test-data.
         x = x_test_scaled
+
+
+    # predict all data range
+    x_all_exp = np.expand_dims(x, axis=0)
+    y_all_pred = model.predict(x_all_exp)
+    y = y_scaler.inverse_transform(y_all_pred[0])
+
+
 
     start_value = account_value
     for i in range(length):
@@ -323,9 +331,8 @@ def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=Fa
         x_sim_exp = np.expand_dims(x_sim, axis=0)
         x_sim_rescaled = x_scaler.inverse_transform(x_sim_exp[0])
 
-        # Use the model to predict the output-signals.
-        y_pred = model.predict(x_sim_exp)
-        y_pred_rescaled = y_scaler.inverse_transform(y_pred[0])
+        # Use already predicted data
+        y_pred_rescaled = y[hist_time:time]
 
         # check last prediction value for price increase or decrease
         last_prediction = y_pred_rescaled[-1][0]
@@ -334,14 +341,13 @@ def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=Fa
         print("Last prediction: {pred}".format(pred=last_prediction))
         print("Current price: {price}".format(price=current_price))
 
-        if (last_prediction > buy_threshold) and account_is_usdt:
+        if (last_prediction > BUY_THRESHOLD) and account_is_usdt and (i != length-1):
             print("Buying")
             account_value = account_value/current_price
             account_is_usdt = False
-            last_sold_price = current_price
             buy_cnt += 1
 
-        elif ((last_prediction < sell_threshold) and not account_is_usdt) or (i == length-1 and not account_is_usdt):
+        elif ((last_prediction < SELL_THRESHOLD) and not account_is_usdt) or (i == length-1 and not account_is_usdt):
             print("Selling")
             account_value = account_value*current_price
             account_is_usdt = True
@@ -357,7 +363,29 @@ def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=Fa
                                                                                 hodls=hodl_cnt))
 
 
-simulate_model_on_history(hist_length=sequence_length, start_idx=18000, length=4320, train=False)
+simulate_model_on_history(hist_length=sequence_length, start_idx=0, length=48000, train=False)
+
+
+def save_model_package_info(model_filename, lstm_units, sequence_length, currency_pair, buy_threshold, sell_threshold):
+    model_info = {
+        "model_filename": model_filename,
+        "lstm_units": lstm_units,
+        "sequence_length": sequence_length,
+        "currency_pair": currency_pair,
+        "buy_threshold": buy_threshold,
+        "sell_threshold": sell_threshold
+    }
+    with open('model_info.json', 'w') as fp:
+        json.dump(model_info, fp, sort_keys=True, indent=4)
+
+
+save_model_package_info(model_filename="model.keras",
+                        lstm_units=lstm_units,
+                        sequence_length=sequence_length,
+                        currency_pair="USDT_BTC",
+                        buy_threshold=BUY_THRESHOLD,
+                        sell_threshold=SELL_THRESHOLD)
+
 
 pass
 
