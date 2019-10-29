@@ -61,4 +61,6 @@ class Worker:
         # Load weights from file
         self.model.load_weights(config["model_weights_filename"])
 
+        pass
+
 
