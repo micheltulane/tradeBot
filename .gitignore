@@ -2,9 +2,6 @@
 .idea
 logs
 data
-src/core/config_worker1.json
-src/core/lstm_model_27-OCT-2019.keras
-src/core/lstm_model_27-OCT-2019.json
+local_config
 src/utils/__pycache__/
 src/core/__pycache__/
-src/model/rnn_exercise.py

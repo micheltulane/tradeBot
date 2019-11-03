@@ -8,6 +8,8 @@ from requests import Request, Session
 import hmac
 import hashlib
 import json
+import time
+from itertools import count
 from ratelimit import limits, sleep_and_retry
 
 POLO_PRIVATE_URL = "https://poloniex.com/tradingApi"
@@ -36,6 +38,7 @@ class PoloExchanger:
     Attributes:
         public_key (str): Public key for Poloniex API
         private_key (str): Private key for Poloniex API
+        nonce_counter (counter): Counter object for nonce generation. Initialized with time.time() at _init_
     """
     def __init__(self, public_key, private_key):
         """Initializes a PoloExchanger with a given config file containing the public and private API keys.
@@ -46,6 +49,7 @@ class PoloExchanger:
         """
         self.public_key = public_key
         self.private_key = private_key
+        self.nonce_counter = count(int(time.time()*1000))
 
     @sleep_and_retry
     @limits(calls=POLO_LIMIT_CALLS, period=POLO_LIMIT_PERIOD_S)
@@ -53,13 +57,92 @@ class PoloExchanger:
         """Calls the Poloniex API given a request. Rate-limited to POLO_LIMIT_CALLS calls per POLO_LIMIT_PERIOD_S sec.
 
         Args:
-            request (Request): Prepared Request object
-
+            prepared_request (Request): Prepared Request object
         Returns:
-            response(Response): Response object
+            response (Response): Response object
         """
         s = Session()
         response = s.send(prepared_request)
         if response.status_code != 200:
             raise PoloExchangerError('API response: {}'.format(response.status_code))
         return response
+
+    def _prepare_private_request(self, payload):
+        """Prepares a POST request signed with SHA512 for Polo private API
+
+        Args:
+            payload (dict): Dict containing POST call parameters
+        Returns:
+            response (Response): Response object
+        """
+        headers = {"Key": self.public_key,
+                   "Sign": ""}
+
+        payload["nonce"] = next(self.nonce_counter)
+
+        request = Request(
+            "POST", POLO_PRIVATE_URL,
+            data=payload,
+            headers=headers)
+
+        prepared_request = request.prepare()
+
+        signature = hmac.new(bytes(self.private_key, 'utf-8'),
+                             bytes(prepared_request.body, 'utf-8'),
+                             digestmod=hashlib.sha512)
+
+        prepared_request.headers['Sign'] = signature.hexdigest()
+
+        return self._call_api(prepared_request=prepared_request)
+
+    def _prepare_public_request(self, payload):
+        """Prepares a GET request for Polo public API
+
+        Args:
+            payload (dict): Dict containing GET call parameters
+        Returns:
+            response (Response): Response object
+        """
+
+        request = Request(
+            "GET", POLO_PUBLIC_URL,
+            params=payload,)
+
+        prepared_request = request.prepare()
+        return self._call_api(prepared_request=prepared_request)
+
+    def return_balances(self):
+        """Calls returnBalances from Poloniex API
+
+        Returns:
+            Dict containing all balances on the account in format {"currency": "balance"}
+        """
+        command = "returnBalances"
+        payload = {"command": command}
+        response = self._prepare_private_request(payload=payload)
+        return response.json()
+
+    def return_chart_data(self, currency_pair, period, start, end):
+        """Calls returnChartData from Poloniex API
+
+        Args:
+            currency_pair (str): The currency pair of the market being requested
+            period (str): Candlestick period in seconds. Valid values are 300, 900, 1800, 7200, 14400, and 86400
+            start (str): The start of the window in seconds since the unix epoch
+            end (str): The end of the window in seconds since the unix epoch
+
+        Returns:
+            Dict containing all output fields (refer to Polo API doc)
+        """
+
+        command = "returnChartData"
+        payload = {"command": command,
+                   "currencyPair": currency_pair,
+                   "start": start,
+                   "end": end,
+                   "period": period}
+
+        response = self._prepare_public_request(payload=payload)
+        response.encoding = "utf-8"
+        return response.json()
+
