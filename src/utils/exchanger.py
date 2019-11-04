@@ -1,6 +1,6 @@
 __author__ = "Michel Tulane"
 """
-Utility class / python wrapper for crypto exchanges APIs
+Utility class / python wrapper for Poloniex exchange API
 """
 
 from datetime import datetime
@@ -16,6 +16,7 @@ POLO_PRIVATE_URL = "https://poloniex.com/tradingApi"
 POLO_PUBLIC_URL = "https://poloniex.com/public"
 POLO_LIMIT_CALLS = 6
 POLO_LIMIT_PERIOD_S = 1
+
 
 class PoloExchangerError(Exception):
     """Exception raised from the PoloExchanger class
@@ -145,4 +146,3 @@ class PoloExchanger:
         response = self._prepare_public_request(payload=payload)
         response.encoding = "utf-8"
         return response.json()
-
