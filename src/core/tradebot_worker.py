@@ -6,9 +6,11 @@ Class description file for a tradebot Worker
 import os
 import logging
 import time
+from datetime import datetime
 import threading
 import numpy
 import json
+import pandas as pd
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.python.keras.models import Sequential, model_from_json
@@ -120,7 +122,8 @@ class Worker:
     def poll_graph_til_updated(self):
         """Gets the last [sequence length] numbers of candlestick data from Poloniex. Loop until a new candlestick is
         available and return the most up to date sequence.
-                """
+        """
+        self.logger.info("Polling graph until updated...")
         # Get current latest candlestick (only get latest 10 points to minimize payloads)
         now = int(time.time())
         temp = self.exchange.return_chart_data(
@@ -153,11 +156,48 @@ class Worker:
             start=str(now-int(self.data_period)*(self.model_sequence_length-1)),
             end=str(int(time.time())))
 
-    def prepare_data(self):
-        pass
+    def prepare_data(self, chart_data):
+        """Takes a given chart data point list (list of dicts), generates features and metadata for model inference
 
-    def do_prediction(self):
-        pass
+        Args:
+            chart_data (list): List of dicts type containing candlestick chart data
+
+        Returns:
+            (Dataframe) Contains processed chart data plus new generated features
+        """
+        self.logger.info("Preparing data...")
+        for i in chart_data:
+            dtobj = datetime.fromtimestamp(i["date"])
+            i.update({"day": dtobj.strftime("%d %B, %Y")})
+            i.update({"time": dtobj.strftime("%H:%M:%S")})
+            i.update({"hour": int(dtobj.strftime("%H"))})
+            i.update({"weekday": int(dtobj.strftime("%w"))})
+            i.update({(self.currency_pair + "_price_change_last_5min"): (i["close"] - i["open"])})
+            i.update({(self.currency_pair + "_volatility"): (i["high"] - i["low"])})
+            i[(self.currency_pair + "_volume")] = i.pop("volume")
+            i[(self.currency_pair + "_high")] = i.pop("high")
+            i[(self.currency_pair + "_low")] = i.pop("low")
+            i[(self.currency_pair + "_open")] = i.pop("open")
+            i[(self.currency_pair + "_close")] = i.pop("close")
+
+        return pd.DataFrame(chart_data)
+
+    def do_prediction(self, prepared_data):
+        """Takes prepared chart data (with additional features and metadata) and runs inference with it.
+
+        Args:
+            prepared_data (Dataframe): Processed chart data plus new generated features
+
+        Returns:
+            (array) Predicted values (entire sequence length)
+        """
+        self.logger.info("Making prediction...")
+
+        # Dropping unnecessary Series from input dataframe (human-readable stuff)
+        x_data = prepared_data.drop(columns=["day", "time"])
+
+        # Converting to numpy array
+        x_data_ndarray = x_data.values
 
     def do_after_prediction(self):
         pass

@@ -52,6 +52,7 @@ worker1 = Worker(name="Worker1",
 # worker1.debug()
 worker1.get_balances()
 latest_sequence = worker1.poll_graph_til_updated()
+prepped_data = worker1.prepare_data(chart_data=latest_sequence)
 
 pass
 

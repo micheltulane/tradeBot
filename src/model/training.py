@@ -3,6 +3,7 @@ __author__ = "Michel Tulane"
 
 # Generic imports
 import os
+import time
 import numpy as np
 import json
 import pandas as pd
@@ -13,6 +14,7 @@ from datetime import datetime
 # NN Model related imports
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.externals import joblib
 from tensorflow import keras
 from keras import layers
 from tensorflow.python.keras.models import Sequential, model_from_json
@@ -21,7 +23,7 @@ from tensorflow.python.keras.optimizers import RMSprop
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
 
 # Execution variables
-TRAIN_MODEL = False
+TRAIN_MODEL = True
 
 DATA_PATH = "../../data/5min_fetched/"
 TRAINING_LOG_PATH = "../../logs/training/"
@@ -31,6 +33,8 @@ BUY_THRESHOLD = 0.1
 SELL_THRESHOLD = -0.1
 tf.keras.backend.clear_session()  # Reset notebook state.
 
+# Execution timestamp (for lod file naming...)
+now = int(time.time())
 
 # Import data
 print("Importing data from disk...")
@@ -311,13 +315,10 @@ def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=Fa
         # Use test-data.
         x = x_test_scaled
 
-
     # predict all data range
     x_all_exp = np.expand_dims(x, axis=0)
     y_all_pred = model.predict(x_all_exp)
     y = y_scaler.inverse_transform(y_all_pred[0])
-
-
 
     start_value = account_value
     for i in range(length):
@@ -367,11 +368,13 @@ simulate_model_on_history(hist_length=sequence_length, start_idx=0, length=20000
 
 
 def save_model_package_info():
-    with open("model_save.json", "w") as json_file:
+    print("Saving model package info...")
+    with open(str(now) + "_model_save.json", "w") as json_file:
         json_file.write(model.to_json())
+        joblib.dump([x_scaler, y_scaler], TRAINING_LOG_PATH + str(now) + "_scalers.joblib")
 
 
-# save_model_package_info()
+save_model_package_info()
 
 
 pass
