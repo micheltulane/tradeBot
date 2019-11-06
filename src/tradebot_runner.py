@@ -1,4 +1,3 @@
-__author__ = "Michel Tulane"
 """
 Main script for "tradebot".
 """
@@ -50,9 +49,10 @@ worker1 = Worker(name="Worker1",
                  exchange=exchange)
 
 # worker1.debug()
-worker1.get_balances()
+worker1._get_balances()
 latest_sequence = worker1.poll_graph_til_updated()
 prepped_data = worker1.prepare_data(chart_data=latest_sequence)
+prediction = worker1.do_prediction(prepped_data)
 
 pass
 

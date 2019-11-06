@@ -23,14 +23,14 @@ from tensorflow.python.keras.optimizers import RMSprop
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
 
 # Execution variables
-TRAIN_MODEL = True
+TRAIN_MODEL = False
 
 DATA_PATH = "../../data/5min_fetched/"
 TRAINING_LOG_PATH = "../../logs/training/"
 MODEL_CHECKPOINT_PATH = TRAINING_LOG_PATH + "checkpoint/model.keras"
 TENSORBOARD_PATH = TRAINING_LOG_PATH + "/tensorboard"
-BUY_THRESHOLD = 0.1
-SELL_THRESHOLD = -0.1
+BUY_THRESHOLD = 0
+SELL_THRESHOLD = -0.4
 tf.keras.backend.clear_session()  # Reset notebook state.
 
 # Execution timestamp (for lod file naming...)
@@ -369,9 +369,10 @@ simulate_model_on_history(hist_length=sequence_length, start_idx=0, length=20000
 
 def save_model_package_info():
     print("Saving model package info...")
-    with open(str(now) + "_model_save.json", "w") as json_file:
+    with open(TRAINING_LOG_PATH + str(now) + "_model_save.json", "w") as json_file:
         json_file.write(model.to_json())
-        joblib.dump([x_scaler, y_scaler], TRAINING_LOG_PATH + str(now) + "_scalers.joblib")
+
+    joblib.dump([x_scaler, y_scaler], TRAINING_LOG_PATH + str(now) + "_scalers.joblib")
 
 
 save_model_package_info()

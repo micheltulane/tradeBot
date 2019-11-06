@@ -1,4 +1,3 @@
-__author__ = "Michel Tulane"
 """
 Utility class / python wrapper for Poloniex exchange API
 """
@@ -146,3 +145,39 @@ class PoloExchanger:
         response = self._prepare_public_request(payload=payload)
         response.encoding = "utf-8"
         return response.json()
+
+    def buy(self, currency_pair, rate, amount, fill_or_kill=True, immediate_or_cancel=True, post_only=False,
+            client_order_id=None):
+        """BUYS STONKS (Places a limit order in a given market)
+
+        Args:
+            currency_pair (str): The currency pair of the market being requested
+            rate (float): The rate to purchase one major unit for this trade.
+            amount (float): The total amount of minor units offered in this buy order.
+            fill_or_kill (bool): Set to True if this order should either fill in its entirety or be completely aborted.
+            immediate_or_cancel (bool): True if any part of the order that cannot be filled immed. will be canceled.
+            post_only (bool): True if this buy order is only to be placed if no portion of it fills immediately.
+            client_order_id (int) 64-bit Integer value used for tracking order across http responses (must be unique)
+
+        Returns:
+            Dict containing the order execution info
+        """
+        command = "buy"
+        payload = {"command": command,
+                   "currencyPair": currency_pair,
+                   "rate": str(rate),
+                   "amount": str(amount)}
+
+        # Optional input fields
+        if fill_or_kill:
+            payload["fillOfKill"] = int(fill_or_kill)
+        if immediate_or_cancel:
+            payload["immediateOrCancel"] = int(immediate_or_cancel)
+        if post_only:
+            payload["postOnly"] = int(post_only)
+        if client_order_id:
+            payload["clientOrderId"] = int(client_order_id)
+
+        response = self._prepare_private_request(payload=payload)
+        return response.json()
+

@@ -1,4 +1,3 @@
-__author__ = "Michel Tulane"
 """
 Class description file for a tradebot Worker
 """
@@ -8,11 +7,12 @@ import logging
 import time
 from datetime import datetime
 import threading
-import numpy
+import numpy as np
 import json
 import pandas as pd
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.externals import joblib
 from tensorflow.python.keras.models import Sequential, model_from_json
 from tensorflow.python.keras.layers import Dense, CuDNNLSTM
 from tradeBot.src.utils.exchanger import PoloExchanger
@@ -37,22 +37,25 @@ class Worker:
     """A Worker uses a pre-trained lstm neural network to predict the price of a currency and buy/sell accordingly.
 
     Attributes:
-        name (str): Name of the Worker
-        model_json_filename (str): Name of keras model config json file.
-        saved_weights_filename (str): Name of keras model weights file.
-        currency_pair (str): The currency pair on which the model was trained
         buy_threshold (float): Model prediction output threshold to buy currency
-        sell_threshold (float): Model prediction output threshold to sell currency
-        model (Sequential): Sequential neural network model
+        currency_pair (str): The currency pair on which the model was trained
+        data_period (str): Candlestick data period, in seconds (ex: 300)
         exchange (PoloExchanger): Poloniex API wrapper object
         logger (Logger): Module-level logger instance
-        minor_currency (str): Name of minor currency (ex: USDT)
-        minor_balance (Float): Amount of the minor currency in account
+        logging_path (str): Path to the Worker's log files
         major_currency (str): Name of minor currency (ex: BTC)
         major_balance (Float): Amount of the major currency in account
-        data_period (str): Candlestick data period, in seconds (ex: 300)
+        minor_currency (str): Name of minor currency (ex: USDT)
+        minor_balance (Float): Amount of the minor currency in account
+        model (Sequential): Sequential neural network model
+        model_params_filename (str): Name of keras model config json file.
         model_sequence_length (int): Number of points used for inference
-        logging_path (str): Path to the Worker's log files
+        model_weights_filename (str): Name of keras model weights file.
+        name (str): Name of the Worker
+        scalers_filename (str): Name of joblib scalers file
+        sell_threshold (float): Model prediction output threshold to sell currency
+        x_scaler (sklearn Scaler): Pre-fitted scaler for input data
+        y_scaler (sklearn Scaler): Pre-fitted scaler for output data
     """
 
     def __init__(self, name, config_file_path, logging_path, exchange, worker_budget=None):
@@ -78,8 +81,9 @@ class Worker:
         with open(config_file_path) as f:
             config = json.load(f)
 
-        self.model_json_filename = os.path.abspath(config_dir + "\\" + config["model_json_filename"])
-        self.saved_weights_filename = os.path.abspath(config_dir + "\\" + config["model_weights_filename"])
+        self.model_params_filename = os.path.abspath(config_dir + "\\" + config["model_params_filename"])
+        self.model_weights_filename = os.path.abspath(config_dir + "\\" + config["model_weights_filename"])
+        self.scalers_filename = os.path.abspath(config_dir + "\\" + config["scalers_filename"])
         self.currency_pair = config["currency_pair"]
         self.buy_threshold = config["buy_threshold"]
         self.sell_threshold = config["sell_threshold"]
@@ -87,13 +91,14 @@ class Worker:
         self.model_sequence_length = config["model_sequence_length"]
 
         # Load model from JSON
-        with open(self.model_json_filename, 'r') as json_file:
+        with open(self.model_params_filename, 'r') as json_file:
             self.model = json_file.read()
             json_file.close()
         self.model = model_from_json(self.model)
+        self.x_scaler, self.y_scaler = joblib.load(self.scalers_filename)
 
         # Load weights from file
-        self.model.load_weights(self.saved_weights_filename)
+        self.model.load_weights(self.model_weights_filename)
 
         # Save PoloExchanger instance
         self.exchange = exchange
@@ -103,7 +108,7 @@ class Worker:
         self.major_balance = None
         self.minor_currency, self.major_currency = self.currency_pair.split("_")
 
-    def get_balances(self):
+    def _get_balances(self):
         """Gets current balances in account and for major and minor currencies in the pair.
         """
         self.logger.info("Getting Balances...")
@@ -199,8 +204,34 @@ class Worker:
         # Converting to numpy array
         x_data_ndarray = x_data.values
 
-    def do_after_prediction(self):
-        pass
+        # Scaling
+        x_data_scaled = self.x_scaler.transform(x_data_ndarray)
+
+        # Arrange data shape and predict
+        x_data_scaled = np.expand_dims(x_data_scaled, axis=0)
+        y_all_pred = self.model.predict(x_data_scaled)
+
+        # Scale back and return y data (prediction)
+        return self.y_scaler.inverse_transform(y_all_pred[0])
+
+    def do_after_prediction(self, predicted_values):
+        """Takes predicted values (close price in x Min) and makes a buy /sell decision
+
+        Args:
+            predicted_values (ndarray): Entire sequence length of predicted values (y_data)
+        """
+        # Updating available balances todo: share minor balance among workers (see budget class attribute)
+        self._get_balances()
+        last_prediction = predicted_values[-1][0]
+        if (last_prediction > self.buy_threshold) and (self.minor_balance > 0):
+            print("Buying")
+
+        elif (last_prediction < self.sell_threshold) and (self.major_balance > 0):
+            print("Selling")
+
+        else:
+            print("Hodl")
+
 
     def debug(self):
         # test = self.exchanger.return_balances()
