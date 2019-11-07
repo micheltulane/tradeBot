@@ -40,7 +40,8 @@ with open(TRADEBOT_CONFIG_PATH) as f:
 
 # Instantiate PoloExchanger
 exchange = PoloExchanger(public_key=config["polo_api_public_key"],
-                         private_key=config["polo_api_private_key"])
+                         private_key=config["polo_api_private_key"],
+                         logging_path=LOGGING_PATH)
 
 # Instantiate Workers
 worker1 = Worker(name="Worker1",
@@ -53,6 +54,10 @@ worker1._get_balances()
 latest_sequence = worker1.poll_graph_til_updated()
 prepped_data = worker1.prepare_data(chart_data=latest_sequence)
 prediction = worker1.do_prediction(prepped_data)
+result = worker1.exchange.buy(currency_pair="USDT_BTC", rate=9330.0, amount=0.0005, fill_or_kill=True,
+                              immediate_or_cancel=True, post_only=False, client_order_id=None)
+
+worker1.exchange._log_trade_results(result)
 
 pass
 

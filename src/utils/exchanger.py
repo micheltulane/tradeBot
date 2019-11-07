@@ -2,6 +2,8 @@
 Utility class / python wrapper for Poloniex exchange API
 """
 
+import os
+import logging
 from datetime import datetime
 from requests import Request, Session
 import hmac
@@ -10,11 +12,14 @@ import json
 import time
 from itertools import count
 from ratelimit import limits, sleep_and_retry
+import csv
 
 POLO_PRIVATE_URL = "https://poloniex.com/tradingApi"
 POLO_PUBLIC_URL = "https://poloniex.com/public"
 POLO_LIMIT_CALLS = 6
 POLO_LIMIT_PERIOD_S = 1
+TRADE_LOGS_HEADER = ["orderNumber", "trade", "amount", "date", "rate", "total", "tradeID", "type", "fee",
+                     "clientOrderId", "currencyPair", "error"]
 
 
 class PoloExchangerError(Exception):
@@ -36,20 +41,32 @@ class PoloExchanger:
     """PoloExchanger interfaces with the Poloniex HTTP API using the request library.
 
     Attributes:
-        public_key (str): Public key for Poloniex API
-        private_key (str): Private key for Poloniex API
+        logger (Logger): Module-level logger instance
         nonce_counter (counter): Counter object for nonce generation. Initialized with time.time() at _init_
+        private_key (str): Private key for Poloniex API
+        public_key (str): Public key for Poloniex API
+        trade_log_csv_filename (str): Name of csv file for trade logs
     """
-    def __init__(self, public_key, private_key):
+    def __init__(self, public_key, private_key, logging_path):
         """Initializes a PoloExchanger with a given config file containing the public and private API keys.
 
         Args:
             public_key (str): Public key for Poloniex API
             private_key (str): Private key for Poloniex API
+            logging_path (str): Path to the PoloExchanger's log files
         """
+        self.logger = logging.getLogger(__name__)
         self.public_key = public_key
         self.private_key = private_key
+        self.trade_log_csv_filename = os.path.abspath(logging_path + "\\" + str(int(time.time())) + "_exch_log.csv")
         self.nonce_counter = count(int(time.time()*1000))
+
+        # Init csv log headers
+        with open(self.trade_log_csv_filename, "w") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(TRADE_LOGS_HEADER)
+        self.logger.info(
+            "Initialized PoloExchanger. csv log file: {file}".format(file=self.trade_log_csv_filename))
 
     @sleep_and_retry
     @limits(calls=POLO_LIMIT_CALLS, period=POLO_LIMIT_PERIOD_S)
@@ -180,4 +197,26 @@ class PoloExchanger:
 
         response = self._prepare_private_request(payload=payload)
         return response.json()
+
+    def _log_trade_results(self, results):
+        """Appends buy / sell trades results to the csv file
+
+        Args:
+            results (dict): Dict containing trade results (see Polo API doc for reference)s
+        """
+        with open(self.trade_log_csv_filename, "a") as csv_file:
+            writer = csv.writer(csv_file)
+
+            # Log each resulting trade as a new row
+            for i, trade in enumerate(results["resultingTrades"]):
+                writer.writerow([results["orderNumber"],
+                                 str(i),
+                                 trade["amount"],
+                                 trade["date"],
+                                 trade["rate"],
+                                 trade["total"],
+                                 trade["tradeID"],
+                                 trade["type"],
+                                 results["fee"],
+                                 results["currencyPair"]])
 
