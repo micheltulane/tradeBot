@@ -29,8 +29,8 @@ DATA_PATH = "../../data/5min_fetched/"
 TRAINING_LOG_PATH = "../../logs/training/"
 MODEL_CHECKPOINT_PATH = TRAINING_LOG_PATH + "checkpoint/model.keras"
 TENSORBOARD_PATH = TRAINING_LOG_PATH + "/tensorboard"
-BUY_THRESHOLD = 0
-SELL_THRESHOLD = -0.4
+BUY_THRESHOLD = -0.15
+SELL_THRESHOLD = -0.2
 tf.keras.backend.clear_session()  # Reset notebook state.
 
 # Execution timestamp (for lod file naming...)
@@ -42,7 +42,7 @@ print("Importing data from disk...")
 df = feather.read_dataframe(os.path.abspath(DATA_PATH + "/USDT_BTC.feather"))
 
 print("Dataframe shame: {shape}".format(shape=df.shape))
-x_data = df.drop(columns=["day", "time", "USDT_BTC_expected_price_change_15min", "USDT_BTC_expected_price_change_5min"])
+x_data = df.drop(columns=["date", "day", "time", "USDT_BTC_expected_price_change_15min", "USDT_BTC_expected_price_change_5min"])
 y_data = df[["USDT_BTC_expected_price_change_5min"]]
 target_names = ["BTC_expected_price_change_5min"]
 print(x_data.shape)
@@ -364,7 +364,7 @@ def simulate_model_on_history(hist_length=100, start_idx=0, length=100, train=Fa
                                                                                 hodls=hodl_cnt))
 
 
-simulate_model_on_history(hist_length=sequence_length, start_idx=0, length=20000, train=False)
+simulate_model_on_history(hist_length=sequence_length, start_idx=0, length=24600, train=False)
 
 
 def save_model_package_info():
@@ -375,7 +375,7 @@ def save_model_package_info():
     joblib.dump([x_scaler, y_scaler], TRAINING_LOG_PATH + str(now) + "_scalers.joblib")
 
 
-save_model_package_info()
+# save_model_package_info()
 
 
 pass

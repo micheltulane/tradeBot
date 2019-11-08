@@ -43,9 +43,9 @@ class Worker:
         exchange (PoloExchanger): Poloniex API wrapper object
         logger (Logger): Module-level logger instance
         logging_path (str): Path to the Worker's log files
-        major_currency (str): Name of minor currency (ex: BTC)
+        major_currency (str): Name of minor currency (ex: USDT)
         major_balance (Float): Amount of the major currency in account
-        minor_currency (str): Name of minor currency (ex: USDT)
+        minor_currency (str): Name of minor currency (ex: BTC)
         minor_balance (Float): Amount of the minor currency in account
         model (Sequential): Sequential neural network model
         model_params_filename (str): Name of keras model config json file.
@@ -58,7 +58,7 @@ class Worker:
         y_scaler (sklearn Scaler): Pre-fitted scaler for output data
     """
 
-    def __init__(self, name, config_file_path, logging_path, exchange, worker_budget=None):
+    def __init__(self, name, config_file_path, logging_path, exchange, worker_budget):
         """Initializes a Worker with a given config file, also loads pre-trained model and weights.
 
         Args:
@@ -106,7 +106,7 @@ class Worker:
         # Init misc attributes
         self.minor_balance = None
         self.major_balance = None
-        self.minor_currency, self.major_currency = self.currency_pair.split("_")
+        self.major_currency, self.minor_currency = self.currency_pair.split("_")
 
     def _get_balances(self):
         """Gets current balances in account and for major and minor currencies in the pair.
@@ -199,7 +199,7 @@ class Worker:
         self.logger.info("Making prediction...")
 
         # Dropping unnecessary Series from input dataframe (human-readable stuff)
-        x_data = prepared_data.drop(columns=["day", "time"])
+        x_data = prepared_data.drop(columns=["date", "day", "time"])
 
         # Converting to numpy array
         x_data_ndarray = x_data.values
@@ -223,24 +223,40 @@ class Worker:
         # Updating available balances todo: share minor balance among workers (see budget class attribute)
         self._get_balances()
         last_prediction = predicted_values[-1][0]
-        if (last_prediction > self.buy_threshold) and (self.minor_balance > 0):
-            print("Buying")
 
-        elif (last_prediction < self.sell_threshold) and (self.major_balance > 0):
-            print("Selling")
+        if (last_prediction > self.buy_threshold) and (self.major_balance > 0):
+            self.logger.info("Predicted price increase. Buying.")
+            # Getting fresh prices
+            order_book = self.exchange.return_order_book(currency_pair=self.currency_pair)
+
+            # Calculating amount to be traded
+            amount_major = min(self.major_balance, self.worker_budget) * 0.99  # Leaving 1% for float rounding errors
+            ask_min = order_book["asks"][0][0]
+
+            # Buying
+            self.exchange.buy(currency_pair=self.currency_pair,
+                              rate=ask_min*1.001,
+                              amount=amount_major/ask_min)
+
+        elif (last_prediction < self.sell_threshold) and (self.minor_balance > 0):
+            self.logger.info("Predicted price decrease. Selling.")
+            # Getting fresh prices
+            order_book = self.exchange.return_order_book(currency_pair=self.currency_pair)
+
+            # Calculating amount to be traded
+            bid_max = order_book["bids"][0][0]
+
+            # Buying
+            self.exchange.sell(currency_pair=self.currency_pair,
+                               rate=bid_max*0.999,
+                               amount=self.minor_balance)
 
         else:
-            print("Hodl")
-
+            self.logger.info("HODL")
 
     def debug(self):
-        # test = self.exchanger.return_balances()
-        test = self.exchange.return_chart_data(currency_pair="USDT_BTC",
-                                               period="300",
-                                               start="1571149212",
-                                               end="1572827612")
-        print(test[-1]["date"])
-
-        pass
-
+        latest_sequence = self.poll_graph_til_updated()
+        prepped_data = self.prepare_data(chart_data=latest_sequence)
+        prediction = self.do_prediction(prepped_data)
+        self.do_after_prediction(predicted_values=prediction)
 

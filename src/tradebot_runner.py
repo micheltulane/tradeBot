@@ -23,7 +23,7 @@ fh = logging.FileHandler(LOGGING_PATH + "\\" + LOGGING_FILENAME)
 fh.setLevel(logging.INFO)
 # Console handler
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.INFO)
 # Formatter
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 fh.setFormatter(formatter)
@@ -47,17 +47,20 @@ exchange = PoloExchanger(public_key=config["polo_api_public_key"],
 worker1 = Worker(name="Worker1",
                  config_file_path=WORKER_CONFIG_PATH,
                  logging_path=LOGGING_PATH,
-                 exchange=exchange)
+                 exchange=exchange,
+                 worker_budget=100.0)
 
-# worker1.debug()
-worker1._get_balances()
-latest_sequence = worker1.poll_graph_til_updated()
-prepped_data = worker1.prepare_data(chart_data=latest_sequence)
-prediction = worker1.do_prediction(prepped_data)
-result = worker1.exchange.buy(currency_pair="USDT_BTC", rate=9330.0, amount=0.0005, fill_or_kill=True,
-                              immediate_or_cancel=True, post_only=False, client_order_id=None)
+while True:
+    worker1.debug()
+# worker1._get_balances()
 
-worker1.exchange._log_trade_results(result)
+# book = worker1.exchange.return_order_book(currency_pair="USDT_BTC")
+# resultBuy = worker1.exchange.buy(currency_pair="USDT_BTC", rate=9210.0, amount=0.0005, fill_or_kill=True,
+#                                  immediate_or_cancel=True, post_only=False, client_order_id=None)
+#
+# resultSell = worker1.exchange.sell(currency_pair="USDT_BTC", rate=9190.0, amount=0.0005, fill_or_kill=True,
+#                                    immediate_or_cancel=True, post_only=False, client_order_id=None)
+
 
 pass
 
